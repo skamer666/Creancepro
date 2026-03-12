@@ -1,0 +1,272 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Auth Models ──────────────────────────────────────────────────────────────
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─── Core Models ──────────────────────────────────────────────────────────────
+
+enum SubscriptionPlan {
+  FREE
+  STARTER
+  PRO
+  ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELED
+  PAST_DUE
+  TRIALING
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?   @db.Text
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts     Account[]
+  sessions     Session[]
+  companies    Company[]
+  subscription Subscription?
+}
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  userId               String             @unique
+  stripeCustomerId     String?            @unique
+  stripeSubscriptionId String?            @unique
+  stripePriceId        String?
+  plan                 SubscriptionPlan   @default(FREE)
+  status               SubscriptionStatus @default(TRIALING)
+  currentPeriodStart   DateTime?
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean            @default(false)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Company {
+  id              String   @id @default(cuid())
+  userId          String
+  name            String
+  siret           String?
+  tva             String?  // TVA belge (BE0123456789)
+  address         String?
+  city            String?
+  postalCode      String?
+  country         String   @default("BE")
+  phone           String?
+  email           String?
+  website         String?
+  logoUrl         String?
+  signatureUrl    String?
+  iban            String?
+  bic             String?
+  bpostApiKey     String?
+  bpostAccountId  String?
+  letterTemplateNl String? @db.Text
+  letterTemplateFr String? @db.Text
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dossiers Dossier[]
+}
+
+// ─── Dossier Models ───────────────────────────────────────────────────────────
+
+enum DossierStatus {
+  NOUVEAU
+  RAPPEL_1
+  RAPPEL_2
+  MISE_EN_DEMEURE
+  BPOST_ENVOYE
+  PROCEDURE_JUDICIAIRE
+  PAYE
+  ABANDONNE
+}
+
+enum DebtorType {
+  B2B
+  B2C
+}
+
+model Dossier {
+  id          String        @id @default(cuid())
+  companyId   String
+  numero      String        @unique // auto-generated e.g. DOS-2024-0001
+  status      DossierStatus @default(NOUVEAU)
+  debtorType  DebtorType    @default(B2B)
+
+  // Débiteur
+  debtorName        String
+  debtorEmail       String?
+  debtorPhone       String?
+  debtorAddress     String?
+  debtorCity        String?
+  debtorPostalCode  String?
+  debtorCountry     String   @default("BE")
+  debtorVat         String?
+  debtorSiret       String?
+
+  // Créance
+  invoiceNumber     String?
+  invoiceDate       DateTime?
+  dueDate           DateTime
+  originalAmount    Decimal   @db.Decimal(12, 2)
+  paidAmount        Decimal   @db.Decimal(12, 2) @default(0)
+  currency          String    @default("EUR")
+  description       String?   @db.Text
+
+  // Intérêts & frais (B2B loi du 2 août 2002)
+  legalInterestRate Decimal?  @db.Decimal(5, 4) // e.g. 0.1200 for 12%
+  interestStartDate DateTime?
+  flatFee           Decimal   @db.Decimal(10, 2) @default(40) // 40€ forfaitaire B2B
+
+  // Méta
+  priority          Int       @default(0) // 0=normal, 1=urgent, 2=critique
+  notes             String?   @db.Text
+  internalRef       String?
+  paidAt            DateTime?
+  closedAt          DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  actions     Action[]
+  documents   Document[]
+  reminders   Reminder[]
+}
+
+enum ActionType {
+  CREATION
+  RAPPEL_1_ENVOYE
+  RAPPEL_2_ENVOYE
+  MED_REDIGEE
+  MED_ENVOYEE_BPOST
+  MED_ENVOYEE_EMAIL
+  PAIEMENT_PARTIEL
+  PAIEMENT_COMPLET
+  PROCEDURE_JUDICIAIRE
+  NOTE_INTERNE
+  STATUT_CHANGE
+  DOCUMENT_GENERE
+  APPEL_TELEPHONE
+  EMAIL_ENVOYE
+}
+
+model Action {
+  id          String     @id @default(cuid())
+  dossierId   String
+  type        ActionType
+  title       String
+  description String?    @db.Text
+  amount      Decimal?   @db.Decimal(12, 2)
+  metadata    Json?      // extra data (tracking number, etc.)
+  performedBy String?    // user name
+  createdAt   DateTime   @default(now())
+
+  dossier  Dossier   @relation(fields: [dossierId], references: [id], onDelete: Cascade)
+  document Document?
+}
+
+enum DocumentType {
+  RAPPEL_1
+  RAPPEL_2
+  MISE_EN_DEMEURE
+  RECU_PAIEMENT
+  AUTRE
+}
+
+model Document {
+  id          String       @id @default(cuid())
+  dossierId   String
+  actionId    String?      @unique
+  type        DocumentType
+  title       String
+  fileUrl     String?      // stored in filesystem or object storage
+  fileSize    Int?
+  mimeType    String       @default("application/pdf")
+  bpostTracking String?
+  sentAt      DateTime?
+  createdAt   DateTime     @default(now())
+
+  dossier Dossier  @relation(fields: [dossierId], references: [id], onDelete: Cascade)
+  action  Action?  @relation(fields: [actionId], references: [id])
+}
+
+model Reminder {
+  id          String    @id @default(cuid())
+  dossierId   String
+  scheduledAt DateTime
+  sentAt      DateTime?
+  type        String    // email, sms
+  recipient   String
+  subject     String?
+  body        String?   @db.Text
+  status      String    @default("PENDING") // PENDING, SENT, FAILED
+  createdAt   DateTime  @default(now())
+
+  dossier Dossier @relation(fields: [dossierId], references: [id], onDelete: Cascade)
+}
+
+// ─── Belgian Legal Rates ───────────────────────────────────────────────────────
+
+model LegalRate {
+  id        String   @id @default(cuid())
+  year      Int
+  semester  Int      // 1 or 2
+  rate      Decimal  @db.Decimal(5, 4) // e.g. 0.1200
+  law       String   @default("2002-08-02") // loi du 2 août 2002
+  createdAt DateTime @default(now())
+
+  @@unique([year, semester])
+}
