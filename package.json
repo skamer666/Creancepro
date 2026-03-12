@@ -10,7 +10,11 @@
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
     "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev"
+    "db:migrate": "prisma migrate dev",
+    "db:seed": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed.ts"
+  },
+  "prisma": {
+    "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^1.6.0",
@@ -44,5 +48,8 @@
     "typescript": "^5.9.3",
     "xlsx": "^0.18.5",
     "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "ts-node": "^10.9.2"
   }
 }
