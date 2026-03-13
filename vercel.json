@@ -1,0 +1,17 @@
+{
+  "buildCommand": "prisma migrate deploy && prisma generate && next build",
+  "installCommand": "npm install",
+  "framework": "nextjs",
+  "regions": ["cdg1"],
+  "env": {
+    "DATABASE_URL": "@database_url",
+    "NEXTAUTH_SECRET": "@nextauth_secret",
+    "NEXTAUTH_URL": "@nextauth_url",
+    "STRIPE_SECRET_KEY": "@stripe_secret_key",
+    "STRIPE_WEBHOOK_SECRET": "@stripe_webhook_secret",
+    "STRIPE_PRICE_ID_STARTER": "@stripe_price_id_starter",
+    "STRIPE_PRICE_ID_PRO": "@stripe_price_id_pro",
+    "RESEND_API_KEY": "@resend_api_key",
+    "EMAIL_FROM": "@email_from"
+  }
+}
